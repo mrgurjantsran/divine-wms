@@ -20,10 +20,10 @@ const PORT = process.env.PORT || 5000;
 app.use(cors({
   origin: ['http://localhost:3000', 
            'http://localhost:3001',
-           'https://divine-wms-ft.vercel.app',
-           'https://divine-wms-g5tto378c-gurjant-srans-projects.vercel.app',
-           'https://divine-wms-ft-git-main-gurjant-srans-projects.vercel.app'
-          ],
+           'https://divinewms.vercel.app',           
+           'https://divinewms-git-main-gurjant-sran.vercel.app',
+           'https://divine-azce1e4sc-gurjant-sran.vercel.app
+            ],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
@@ -83,6 +83,7 @@ app.use(errorHandler);
   }
 })();
 export default app;
+
 
 
 
