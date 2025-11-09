@@ -21,7 +21,8 @@ app.use(cors({
   origin: ['http://localhost:3000', 
            'http://localhost:3001',
            'https://divine-wms-ft.vercel.app',
-           'https://divine-wms-g5tto378c-gurjant-srans-projects.vercel.app'
+           'https://divine-wms-g5tto378c-gurjant-srans-projects.vercel.app',
+           'https://divine-wms-ft-git-main-gurjant-srans-projects.vercel.app'
           ],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
@@ -83,5 +84,6 @@ app.use(errorHandler);
 })();
 
 export default app;
+
 
 
