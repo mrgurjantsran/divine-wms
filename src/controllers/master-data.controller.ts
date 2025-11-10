@@ -331,11 +331,12 @@ async function processExcelStream(filePath: string, batchId: string, jobId: stri
       cleanup(filePath, jobId, csvPath);
     });
 
-    stream.on('error', (err: { message: any; }) => {
-      console.error('❌ Stream error:', err);
-      saveProgress(jobId, { status: 'failed', error: err.message, batchId });
-      cleanup(filePath, jobId, csvPath);
-    });
+    stream.on('error', (err: Error) => {
+  console.error('❌ Stream error:', err);
+  saveProgress(jobId, { status: 'failed', error: err.message, batchId });
+  cleanup(filePath, jobId, csvPath);
+   });
+
 
   } catch (error: any) {
     console.error('❌ Excel error:', error);
