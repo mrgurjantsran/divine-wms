@@ -30,8 +30,8 @@ app.use(cors({
   maxAge: 86400
 }));
 
-app.use(express.urlencoded({ limit: '500mb', extended: true }));
-app.use(express.json({ limit: '500mb' }));
+app.use(express.urlencoded({ limit: '1000mb', extended: true }));
+app.use(express.json({ limit: '1000mb' }));
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
 // API Routes
@@ -83,6 +83,7 @@ app.use(errorHandler);
   }
 })();
 export default app;
+
 
 
 
