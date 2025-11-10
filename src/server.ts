@@ -20,7 +20,8 @@ const PORT = process.env.PORT || 5000;
 app.use(cors({
   origin: ['http://localhost:3000', 
            'http://localhost:3001',
-           'https://divinewms.vercel.app',           
+           'https://divinewms.vercel.app',  
+           'https://divine-wms.onrender.com/api',
            'https://divinewms-git-main-gurjant-sran.vercel.app',
            'https://divine-azce1e4sc-gurjant-sran.vercel.app'
             ],
@@ -83,6 +84,7 @@ app.use(errorHandler);
   }
 })();
 export default app;
+
 
 
 
