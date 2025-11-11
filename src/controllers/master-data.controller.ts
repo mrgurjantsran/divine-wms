@@ -5,7 +5,8 @@ import fs from 'fs';
 import path from 'path';
 import csv from 'csv-parser';
 import { createReadStream } from 'fs';
-import * as XLSX from 'xlsx';
+import ExcelJS from 'exceljs';
+
 
 const PROGRESS_DIR = path.join(__dirname, '../../temp/progress');
 
@@ -227,14 +228,13 @@ async function processCSVStream(filePath: string, batchId: string, jobId: string
 }
 
 /**
- * ✅ Excel Stream Processing
+ * ✅ Excel Stream Processing (using ExcelJS - memory safe)
  */
 async function processExcelStream(filePath: string, batchId: string, jobId: string) {
   const CHUNK_SIZE = 500;
   let rows: any[] = [];
   let total = 0;
   let success = 0;
-  let csvPath = '';
 
   try {
     saveProgress(jobId, {
@@ -245,49 +245,46 @@ async function processExcelStream(filePath: string, batchId: string, jobId: stri
       batchId
     });
 
-     // Convert Excel to CSV
-      const workbook = XLSX.readFile(filePath);
-      const sheet = workbook.Sheets[workbook.SheetNames[0]];
-      const csvData = XLSX.utils.sheet_to_csv(sheet); // 🔹 yahan variable ka naam 'csvData' rakho
-      csvPath = filePath.replace(/\.\w+$/, '.csv');
-      fs.writeFileSync(csvPath, csvData);
+    const workbook = new ExcelJS.Workbook();
+    const stream = fs.createReadStream(filePath);
+    await workbook.xlsx.read(stream);
 
-      // Stream CSV
-      const stream = createReadStream(csvPath).pipe(csv()); // 🔹 yahan 'csv()' wahi import wala function hai
+    const worksheet = workbook.worksheets[0];
 
-
-     stream.on('data', async (row: any) => {
-      const wsn = row['WSN'] || row['wsn'];
-      if (!wsn) return;
+    for (const rawRow of worksheet.getSheetValues().slice(1)) {
+      const row = rawRow as ExcelJS.CellValue[]; 
+ 
+      if (!row) continue;
+      const wsn = row[1];
+      if (!wsn) continue;
 
       rows.push({
         wsn: String(wsn).trim(),
-        wid: row['WID'] || row['wid'] || null,
-        fsn: row['FSN'] || row['fsn'] || null,
-        order_id: row['Order_ID'] || row['order_id'] || null,
-        fkqc_remark: row['FKQC_Remark'] || row['fkqc_remark'] || null,
-        fk_grade: row['FK_Grade'] || row['fk_grade'] || null,
-        product_title: row['Product_Title'] || row['product_title'] || null,
-        hsn_sac: row['HSN/SAC'] || row['hsn_sac'] || null,
-        igst_rate: row['IGST_Rate'] || row['igst_rate'] || null,
-        fsp: row['FSP'] || row['fsp'] || null,
-        mrp: row['MRP'] || row['mrp'] || null,
-        invoice_date: row['Invoice_Date'] || row['invoice_date'] || null,
-        fkt_link: row['Fkt_Link'] || row['fkt_link'] || null,
-        wh_location: row['Wh_Location'] || row['wh_location'] || null,
-        brand: row['BRAND'] || row['brand'] || null,
-        cms_vertical: row['cms_vertical'] || row['CMS_Vertical'] || null,
-        vrp: row['VRP'] || row['vrp'] || null,
-        yield_value: row['Yield_Value'] || row['yield_value'] || null,
-        p_type: row['P_Type'] || row['p_type'] || null,
-        p_size: row['P_Size'] || row['p_size'] || null,
+        wid: row[2] || null,
+        fsn: row[3] || null,
+        order_id: row[4] || null,
+        fkqc_remark: row[5] || null,
+        fk_grade: row[6] || null,
+        product_title: row[7] || null,
+        hsn_sac: row[8] || null,
+        igst_rate: row[9] || null,
+        fsp: row[10] || null,
+        mrp: row[11] || null,
+        invoice_date: row[12] || null,
+        fkt_link: row[13] || null,
+        wh_location: row[14] || null,
+        brand: row[15] || null,
+        cms_vertical: row[16] || null,
+        vrp: row[17] || null,
+        yield_value: row[18] || null,
+        p_type: row[19] || null,
+        p_size: row[20] || null,
         batchId
       });
 
       total++;
 
       if (rows.length >= CHUNK_SIZE) {
-        stream.pause();
         try {
           await insertBatch(rows);
           success += rows.length;
@@ -296,52 +293,39 @@ async function processExcelStream(filePath: string, batchId: string, jobId: stri
           saveProgress(jobId, {
             status: 'processing',
             processed: total,
-            total: total,
+            total,
             successCount: success,
             batchId
           });
 
-          stream.resume();
+          // ⏸ Throttle DB inserts slightly to reduce memory spikes
+          await new Promise(r => setTimeout(r, 150));
         } catch (err) {
-          console.error('❌ Batch error:', err);
-          stream.resume();
+          console.error('❌ Batch insert error:', err);
         }
       }
+    }
+
+    // Process remaining rows
+    if (rows.length > 0) {
+      await insertBatch(rows);
+      success += rows.length;
+    }
+
+    saveProgress(jobId, {
+      status: 'completed',
+      processed: total,
+      total,
+      successCount: success,
+      batchId
     });
 
-    stream.on('end', async () => {
-      if (rows.length > 0) {
-        try {
-          await insertBatch(rows);
-          success += rows.length;
-        } catch (err) {
-          console.error('❌ Final error:', err);
-        }
-      }
-
-      saveProgress(jobId, {
-        status: 'completed',
-        processed: total,
-        total: total,
-        successCount: success,
-        batchId
-      });
-
-      console.log(`✅ Excel complete: ${success}/${total} rows`);
-      cleanup(filePath, jobId, csvPath);
-    });
-
-    stream.on('error', (err: Error) => {
-  console.error('❌ Stream error:', err);
-  saveProgress(jobId, { status: 'failed', error: err.message, batchId });
-  cleanup(filePath, jobId, csvPath);
-   });
-
-
+    console.log(`✅ Excel complete: ${success}/${total} rows`);
+    cleanup(filePath, jobId);
   } catch (error: any) {
-    console.error('❌ Excel error:', error);
+    console.error('❌ Excel stream error:', error);
     saveProgress(jobId, { status: 'failed', error: error.message, batchId });
-    cleanup(filePath, jobId, csvPath);
+    cleanup(filePath, jobId);
   }
 }
 
