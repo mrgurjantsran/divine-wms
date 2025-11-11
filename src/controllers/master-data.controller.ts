@@ -228,7 +228,7 @@ async function processCSVStream(filePath: string, batchId: string, jobId: string
 }
 
 /**
- * ✅ Excel Stream Processing (using ExcelJS - memory safe)
+ * ✅ Excel Stream Processing (true streaming mode)
  */
 async function processExcelStream(filePath: string, batchId: string, jobId: string) {
   const CHUNK_SIZE = 500;
@@ -238,96 +238,97 @@ async function processExcelStream(filePath: string, batchId: string, jobId: stri
 
   try {
     saveProgress(jobId, {
-      status: 'processing',
+      status: "processing",
       processed: 0,
       total: 0,
       successCount: 0,
-      batchId
+      batchId,
     });
 
-    const workbook = new ExcelJS.Workbook();
-    const stream = fs.createReadStream(filePath);
-    await workbook.xlsx.read(stream);
+    const workbookReader = new ExcelJS.stream.xlsx.WorkbookReader(filePath, {
+      entries: "emit",
+      sharedStrings: "cache",
+      worksheets: "emit",
+      styles: "cache",
+    });
 
-    const worksheet = workbook.worksheets[0];
+    for await (const worksheetReader of workbookReader) {
+      for await (const row of worksheetReader) {
+        const values = row.values as ExcelJS.CellValue[];
+        const wsn = values[1];
+        if (!wsn) continue;
 
-    for (const rawRow of worksheet.getSheetValues().slice(1)) {
-      const row = rawRow as ExcelJS.CellValue[]; 
- 
-      if (!row) continue;
-      const wsn = row[1];
-      if (!wsn) continue;
+        rows.push({
+          wsn: String(wsn).trim(),
+          wid: values[2] || null,
+          fsn: values[3] || null,
+          order_id: values[4] || null,
+          fkqc_remark: values[5] || null,
+          fk_grade: values[6] || null,
+          product_title: values[7] || null,
+          hsn_sac: values[8] || null,
+          igst_rate: values[9] || null,
+          fsp: values[10] || null,
+          mrp: values[11] || null,
+          invoice_date: values[12] || null,
+          fkt_link: values[13] || null,
+          wh_location: values[14] || null,
+          brand: values[15] || null,
+          cms_vertical: values[16] || null,
+          vrp: values[17] || null,
+          yield_value: values[18] || null,
+          p_type: values[19] || null,
+          p_size: values[20] || null,
+          batchId,
+        });
 
-      rows.push({
-        wsn: String(wsn).trim(),
-        wid: row[2] || null,
-        fsn: row[3] || null,
-        order_id: row[4] || null,
-        fkqc_remark: row[5] || null,
-        fk_grade: row[6] || null,
-        product_title: row[7] || null,
-        hsn_sac: row[8] || null,
-        igst_rate: row[9] || null,
-        fsp: row[10] || null,
-        mrp: row[11] || null,
-        invoice_date: row[12] || null,
-        fkt_link: row[13] || null,
-        wh_location: row[14] || null,
-        brand: row[15] || null,
-        cms_vertical: row[16] || null,
-        vrp: row[17] || null,
-        yield_value: row[18] || null,
-        p_type: row[19] || null,
-        p_size: row[20] || null,
-        batchId
-      });
+        total++;
 
-      total++;
+        if (rows.length >= CHUNK_SIZE) {
+          try {
+            await insertBatch(rows);
+            success += rows.length;
+            rows = [];
 
-      if (rows.length >= CHUNK_SIZE) {
-        try {
-          await insertBatch(rows);
-          success += rows.length;
-          rows = [];
+            saveProgress(jobId, {
+              status: "processing",
+              processed: total,
+              total,
+              successCount: success,
+              batchId,
+            });
 
-          saveProgress(jobId, {
-            status: 'processing',
-            processed: total,
-            total,
-            successCount: success,
-            batchId
-          });
-
-          // ⏸ Throttle DB inserts slightly to reduce memory spikes
-          await new Promise(r => setTimeout(r, 150));
-        } catch (err) {
-          console.error('❌ Batch insert error:', err);
+            // prevent render memory spikes
+            await new Promise((r) => setTimeout(r, 50));
+          } catch (err) {
+            console.error("❌ Batch insert error:", err);
+          }
         }
       }
     }
 
-    // Process remaining rows
     if (rows.length > 0) {
       await insertBatch(rows);
       success += rows.length;
     }
 
     saveProgress(jobId, {
-      status: 'completed',
+      status: "completed",
       processed: total,
       total,
       successCount: success,
-      batchId
+      batchId,
     });
 
     console.log(`✅ Excel complete: ${success}/${total} rows`);
     cleanup(filePath, jobId);
   } catch (error: any) {
-    console.error('❌ Excel stream error:', error);
-    saveProgress(jobId, { status: 'failed', error: error.message, batchId });
+    console.error("❌ Excel stream error:", error);
+    saveProgress(jobId, { status: "failed", error: error.message, batchId });
     cleanup(filePath, jobId);
   }
 }
+
 
 /**
  * ✅ Batch Insert
@@ -461,3 +462,4 @@ export const exportMasterData = async (req: Request, res: Response) => {
     res.status(500).json({ error: error.message });
   }
 };
+
