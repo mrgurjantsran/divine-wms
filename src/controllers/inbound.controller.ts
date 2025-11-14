@@ -328,7 +328,10 @@ async function processInboundBulk(data: any[], batchId: string, warehouseId: str
   }
 }
 
-// Multi-entry with duplicate highlighting
+
+
+// Multi-entry with BATCH ID generation and duplicate highlighting
+// Multi-entry with batch insert
 export const multiInboundEntry = async (req: Request, res: Response) => {
   try {
     const { entries, warehouse_id } = req.body;
@@ -336,7 +339,7 @@ export const multiInboundEntry = async (req: Request, res: Response) => {
     const userName = (req as any).user?.full_name || 'Unknown';
 
     if (!entries || entries.length === 0) {
-      return res.status(400).json({ error: 'No entries provided' });
+      return res.status(400).json({ error: "No entries provided" });
     }
 
     // Get warehouse name
@@ -344,154 +347,109 @@ export const multiInboundEntry = async (req: Request, res: Response) => {
     const whResult = await query(whSql, [warehouse_id]);
     const warehouseName = whResult.rows[0]?.name || '';
 
-    // ✅ CRITICAL: Check EXISTING database WSNs across ALL warehouses
     const wsns = entries.map((e: any) => e.wsn).filter(Boolean);
-    const existingMap = new Map<string, number>();
 
+    // Existing WSN check
+    const existingMap = new Map<string, number>();
     if (wsns.length > 0) {
-      const existingSql = `SELECT wsn, warehouse_id FROM inbound WHERE wsn = ANY($1)`;
-      const existingResult = await query(existingSql, [wsns]);
-      existingResult.rows.forEach((row: any) => {
+      const checkSql = `SELECT wsn, warehouse_id FROM inbound WHERE wsn = ANY($1)`;
+      const checkRes = await query(checkSql, [wsns]);
+
+      checkRes.rows.forEach((row: any) => {
         existingMap.set(row.wsn, row.warehouse_id);
       });
     }
 
-    // ✅ ALSO CHECK: Duplicates within current entries array
-    const wsnCountInCurrentBatch = new Map<string, number>();
-    wsns.forEach((wsn: string) => {
-      wsnCountInCurrentBatch.set(wsn, (wsnCountInCurrentBatch.get(wsn) || 0) + 1);
-    });
-
-    // Get master data
-    const masterDataMap = new Map<string, any>();
+    // Master data
+    const masterMap = new Map<string, any>();
     if (wsns.length > 0) {
       const masterSql = `SELECT * FROM master_data WHERE wsn = ANY($1)`;
-      const masterResult = await query(masterSql, [wsns]);
-      masterResult.rows.forEach((row: any) => {
-        masterDataMap.set(row.wsn, row);
+      const masterRes = await query(masterSql, [wsns]);
+
+      masterRes.rows.forEach((row: any) => {
+        masterMap.set(row.wsn, row);
       });
     }
 
-    // ❌ NO BATCH ID FOR MULTI ENTRY
+    const batchId = generateBatchId("MULTI");
+
     let successCount = 0;
     const results: any[] = [];
 
     for (const entry of entries) {
-      if (!entry.wsn || !entry.wsn.trim()) continue;
+      const wsn = entry.wsn?.trim();
+      if (!wsn) continue;
 
-      const wsn = entry.wsn.trim();
-
-      // Check 1: Already exists in database?
-      const isDuplicate = existingMap.has(wsn);
-      const isCrossWarehouse = isDuplicate && existingMap.get(wsn) !== Number(warehouse_id);
-
-      if (isCrossWarehouse) {
+      // Duplicate check
+      if (existingMap.has(wsn)) {
         results.push({
           wsn,
-          status: 'CROSS_WAREHOUSE_ERROR',
-          message: `WSN exists in different warehouse`,
+          status: "DUPLICATE",
+          message: "WSN already inbound"
         });
         continue;
       }
 
-      if (isDuplicate) {
-        results.push({
-          wsn,
-          status: 'DUPLICATE',
-          message: 'Duplicate WSN in same warehouse',
-          highlight: true
-        });
-        continue;
-      }
+      const m = masterMap.get(wsn) || {};
 
-      // Check 2: Duplicate within current batch?
-      if (wsnCountInCurrentBatch.get(wsn)! > 1) {
-        results.push({
-          wsn,
-          status: 'DUPLICATE',
-          message: 'Duplicate WSN in this batch',
-          highlight: true
-        });
-        continue;
-      }
+      const sql = `
+        INSERT INTO inbound (
+          wsn, inbound_date, vehicle_no, product_serial_number, rack_no,
+          unload_remarks, warehouse_id, warehouse_name,
+          wid, fsn, product_title, brand, mrp, fsp, hsn_sac, igst_rate,
+          cms_vertical, fkt_link,
+          batch_id, created_by, created_user_name
+        )
+        VALUES (
+          $1,$2,$3,$4,$5,
+          $6,$7,$8,
+          $9,$10,$11,$12,$13,$14,$15,$16,
+          $17,$18,
+          $19,$20,$21
+        )
+      `;
 
-      const masterInfo = masterDataMap.get(wsn) || {};
+      await query(sql, [
+        wsn,
+        entry.inbound_date || new Date(),
+        entry.vehicle_no || null,
+        entry.product_serial_number || null,
+        entry.rack_no || null,
+        entry.unload_remarks || null,
+        warehouse_id,
+        warehouseName,
+        m.wid || null,
+        m.fsn || null,
+        m.product_title || null,
+        m.brand || null,
+        m.mrp || null,
+        m.fsp || null,
+        m.hsn_sac || null,
+        m.igst_rate || null,
+        m.cms_vertical || null,
+        m.fkt_link || null,
+        batchId,
+        userId,
+        userName
+      ]);
 
-      try {
-        // ✅ NO BATCH_ID in INSERT
-        const insertSql = `
-          INSERT INTO inbound (
-            wsn, inbound_date, vehicle_no, product_serial_number,
-            rack_no, unload_remarks, warehouse_id, warehouse_name,
-            wid, fsn, order_id, fk_qc_remark, fk_grade, product_title,
-            hsn_sac, igst_rate, fsp, mrp, invoice_date, fkt_link,
-            wh_location, brand, cms_vertical, vrp, yield_value, p_type, p_size,
-            created_by, created_user_name
-          ) VALUES (
-            $1, $2, $3, $4, $5, $6, $7, $8,
-            $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20,
-            $21, $22, $23, $24, $25, $26, $27, $28, $29
-          )
-        `;
-
-        await query(insertSql, [
-          entry.wsn,
-          entry.inbound_date,
-          entry.vehicle_no,
-          entry.product_serial_number,
-          entry.rack_no,
-          entry.unload_remarks,
-          warehouse_id,
-          warehouseName,
-          masterInfo.wid || null,
-          masterInfo.fsn || null,
-          masterInfo.order_id || null,
-          masterInfo.fk_qc_remark || null,
-          masterInfo.fk_grade || null,
-          masterInfo.product_title || null,
-          masterInfo.hsn_sac || null,
-          masterInfo.igst_rate || null,
-          masterInfo.fsp || null,
-          masterInfo.mrp || null,
-          masterInfo.invoice_date || null,
-          masterInfo.fkt_link || null,
-          masterInfo.wh_location || null,
-          masterInfo.brand || null,
-          masterInfo.cms_vertical || null,
-          masterInfo.vrp || null,
-          masterInfo.yield_value || null,
-          masterInfo.p_type || null,
-          masterInfo.p_size || null,
-          userId,
-          userName
-        ]);
-
-        successCount++;
-        results.push({
-          wsn: entry.wsn,
-          status: 'SUCCESS'
-        });
-      } catch (error) {
-        results.push({
-          wsn: entry.wsn,
-          status: 'ERROR',
-          message: 'Insert failed'
-        });
-      }
+      results.push({ wsn, status: "SUCCESS" });
+      successCount++;
     }
 
     res.json({
-      timestamp: new Date().toISOString(),
-      successCount,
+      batchId,
       totalCount: entries.length,
+      successCount,
       results
     });
 
   } catch (error: any) {
-    console.error('❌ Multi-entry error:', error);
+    console.error("Multi Entry ERROR:", error);
     res.status(500).json({ error: error.message });
   }
 };
+
 
 
 // Get inbound list with filters
@@ -771,3 +729,4 @@ export const getCategories = async (req: Request, res: Response) => {
     res.status(500).json({ error: error.message });
   }
 };
+
