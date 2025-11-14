@@ -3,6 +3,8 @@ import multer from 'multer';
 import path from 'path';
 import { authMiddleware } from '../middleware/auth.middleware';
 import * as inboundController from '../controllers/inbound.controller';
+import { multiInboundEntry } from "../controllers/inbound.controller";
+
 
 const router: Router = express.Router();
 
@@ -45,11 +47,9 @@ router.get('/brands', authMiddleware, inboundController.getBrands);
 router.get('/categories', authMiddleware, inboundController.getCategories);
 router.get('/brands', authMiddleware, inboundController.getBrands);
 router.get('/categories', authMiddleware, inboundController.getCategories);
+router.post('/multi-entry', authMiddleware, multiInboundEntry);
 
 
-// router.post('/single', authMiddleware, inboundController.createInboundEntry);
-// router.post('/bulk', authMiddleware, upload.single('file'), inboundController.bulkInboundUpload);
-// router.post('/multi', authMiddleware, inboundController.multiInboundEntry);
 
 export default router;
 
