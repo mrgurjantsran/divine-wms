@@ -198,3 +198,27 @@ export const bulkUploadRacks = async (req: Request, res: Response) => {
   }
 };
 
+// Get racks by warehouse (for dropdown)
+export const getRacksByWarehouse = async (req: Request, res: Response) => {
+  try {
+    const { warehouse_id } = req.query;
+
+    if (!warehouse_id) {
+      return res.status(400).json({ error: 'warehouse_id required' });
+    }
+
+    const sql = `
+      SELECT id, rack_name, rack_type, capacity, location
+      FROM racks
+      WHERE warehouse_id = $1 AND is_active = true
+      ORDER BY rack_name ASC
+    `;
+
+    const result = await query(sql, [warehouse_id]);
+    res.json(result.rows);
+
+  } catch (error: any) {
+    console.error('Get racks error:', error);
+    res.status(500).json({ error: error.message });
+  }
+};
