@@ -730,3 +730,17 @@ export const getCategories = async (req: Request, res: Response) => {
   }
 };
 
+// ✅ Get ALL existing inbound WSNs (for dropdown / validation)
+export const getAllInboundWSNs = async (req: Request, res: Response) => {
+  try {
+    const sql = `SELECT DISTINCT wsn FROM inbound ORDER BY wsn ASC`;
+    const result = await query(sql);
+
+    const wsns = result.rows.map((r: any) => r.wsn);
+
+    res.json(wsns);
+  } catch (error: any) {
+    console.error("❌ Error fetching inbound WSNs:", error);
+    res.status(500).json({ error: error.message });
+  }
+};
