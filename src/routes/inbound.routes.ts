@@ -48,6 +48,8 @@ router.get('/categories', authMiddleware, inboundController.getCategories);
 router.get('/brands', authMiddleware, inboundController.getBrands);
 router.get('/categories', authMiddleware, inboundController.getCategories);
 router.post('/multi-entry', authMiddleware, multiInboundEntry);
+router.get('/wsns/all', authMiddleware, inboundController.getAllInboundWSNs);
+
 
 
 
