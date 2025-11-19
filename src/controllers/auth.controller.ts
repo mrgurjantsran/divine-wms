@@ -35,19 +35,31 @@ export const login = async (req: Request, res: Response) => {
       username: user.username,
       role: user.role,
       warehouseId: user.warehouse_id,
-    });
+ });
 
-    res.json({
-      token,
-      user: {
-        id: user.id,
-        username: user.username,
-        fullName: user.full_name,
-        email: user.email,
-        role: user.role,
-        warehouseId: user.warehouse_id,
-      },
-    });
+  // Set token as cookie
+  res.cookie("token", token, {
+  httpOnly: false,  
+  secure: false,    
+  sameSite: "lax",
+  path: "/",
+  maxAge: 7 * 24 * 60 * 60 * 1000 // 🔥 7 days login persistence
+  });
+
+  // Send response
+  res.json({
+   token,
+   user: {
+    id: user.id,
+    username: user.username,
+    fullName: user.full_name,
+    email: user.email,
+    role: user.role,
+    warehouseId: user.warehouse_id,
+   },
+  });
+
+
   } catch (error: any) {
     console.error('Login error:', error);
     res.status(500).json({ error: error.message });
