@@ -11,6 +11,7 @@ import masterDataRoutes from './routes/master-data.routes';
 import usersRoutes from './routes/users.routes';
 import rackRoutes from './routes/rack.routes';
 import qcRoutes from './routes/qc.routes';
+import pickingRoutes from './routes/picking.routes';
 
 dotenv.config();
 
@@ -46,6 +47,9 @@ app.use('/api/master-data', masterDataRoutes);
 app.use('/api/users', usersRoutes);
 app.use('/api/racks', rackRoutes);
 app.use('/api/qc', qcRoutes);
+app.use('/api/picking', pickingRoutes);
+
+
 
 // Health Check
 app.get('/api/health', (req: Request, res: Response) => {
@@ -87,21 +91,3 @@ app.use(errorHandler);
   }
 })();
 export default app;
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
