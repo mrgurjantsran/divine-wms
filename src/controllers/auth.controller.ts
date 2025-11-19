@@ -39,11 +39,11 @@ export const login = async (req: Request, res: Response) => {
 
   // Set token as cookie
   res.cookie("token", token, {
-  httpOnly: false,  
-  secure: false,    
-  sameSite: "lax",
-  path: "/",
-  maxAge: 7 * 24 * 60 * 60 * 1000 // 🔥 7 days login persistence
+httpOnly: true,
+secure: true,
+sameSite: "none",
+path: "/",
+maxAge: 7 * 24 * 60 * 60 * 1000 // 🔥 7 days login persistence
   });
 
   // Send response
@@ -109,3 +109,4 @@ export const register = async (req: Request, res: Response) => {
     res.status(500).json({ error: error.message });
   }
 };
+
