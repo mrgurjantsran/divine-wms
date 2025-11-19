@@ -2,42 +2,41 @@ import express, { Express, Request, Response } from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import path from 'path';
+import cookieParser from "cookie-parser";
+
 import { initializeDatabase } from './config/database';
 import authRoutes from './routes/auth.routes';
 import warehousesRoutes from './routes/warehouses.routes';
-import { errorHandler } from './middleware/errorHandler.middleware';
 import inboundRoutes from './routes/inbound.routes';
 import masterDataRoutes from './routes/master-data.routes';
 import usersRoutes from './routes/users.routes';
 import rackRoutes from './routes/rack.routes';
 import qcRoutes from './routes/qc.routes';
 import pickingRoutes from './routes/picking.routes';
-import cookieParser from "cookie-parser";
+import { errorHandler } from './middleware/errorHandler.middleware';
 
 dotenv.config();
 
 const app: Express = express();
 const PORT = process.env.PORT || 5000;
 
-// Middleware
+// CORS (MUST BE FIRST)
 app.use(cors({
   origin: [
     'http://localhost:3000',
-    'http://localhost:3001',
-    'https://divinewms.vercel.app',
-    'https://divinewms-git-main-gurjant-sran.vercel.app',
-    'https://divine-azce1e4sc-gurjant-sran.vercel.app'
+    'https://divinewms.vercel.app'
   ],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
-  maxAge: 86400
 }));
-
-app.options(/.*/, cors());
 
 app.use(express.urlencoded({ limit: '1000mb', extended: true }));
 app.use(express.json({ limit: '1000mb' }));
+
+// 🔥 COOKIE PARSER MUST COME BEFORE ROUTES
+app.use(cookieParser());
+
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
 // API Routes
@@ -49,47 +48,35 @@ app.use('/api/users', usersRoutes);
 app.use('/api/racks', rackRoutes);
 app.use('/api/qc', qcRoutes);
 app.use('/api/picking', pickingRoutes);
-app.use(cookieParser());
-
 
 // Health Check
 app.get('/api/health', (req: Request, res: Response) => {
-  res.json({ 
-    status: 'OK', 
+  res.json({
+    status: 'OK',
     timestamp: new Date(),
     environment: process.env.NODE_ENV || 'development'
   });
 });
 
-// 404 Handler
+// 404
 app.use((req: Request, res: Response) => {
   res.status(404).json({ error: 'Route not found' });
 });
 
-// Error Handler (must be last)
+// Error Handler
 app.use(errorHandler);
 
-// Initialize and Start Server
+// Start Server
 (async () => {
   try {
     await initializeDatabase();
-    
     app.listen(PORT, () => {
-      console.log('');
-      console.log('========================================');
-      console.log('  WAREHOUSE MANAGEMENT SYSTEM');
-      console.log('========================================');
-      console.log(`✓ Server running on http://localhost:${PORT}`);
-      console.log(`✓ Health check: http://localhost:${PORT}/api/health`);
-      console.log(`✓ Environment: ${process.env.NODE_ENV || 'development'}`);
-      console.log(`✓ Database: Connected`);
-      console.log('========================================');
-      console.log('');
+      console.log(`✓ Server running on port ${PORT}`);
     });
-  } catch (error) {
-    console.error('❌ Failed to start server:', error);
+  } catch (err) {
+    console.error('❌ Failed to start server:', err);
     process.exit(1);
   }
 })();
-export default app;
 
+export default app;
