@@ -302,31 +302,57 @@ export const getSourceByWSN = async (req: Request, res: Response) => {
 export const multiPickingEntry = async (req: Request, res: Response) => {
   try {
     const { entries, warehouse_id } = req.body;
-    const userId = (req as any).user?.id || 1;
-    const userName = (req as any).user?.fullName || 'System';
 
     if (!entries || entries.length === 0) {
-      return res.status(400).json({ error: 'No entries' });
+      return res.status(400).json({ error: 'No entries provided' });
     }
 
     let successCount = 0;
+
     for (const entry of entries) {
       const wsn = entry.wsn?.trim();
       if (!wsn) continue;
 
-      const sql = `INSERT INTO picking (wsn, picking_date, picker_name, source, warehouse_id, created_by, created_user_name, created_at) 
-                   VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())`;
-      
-      await query(sql, [wsn, entry.picking_date, entry.picker_name, entry.source, warehouse_id, userId, userName]);
+      // 💥 Use frontend values (req.user is undefined)
+      const userId = entry.created_by;
+      const userName = entry.created_user_name;
+
+      if (!userId) {
+        return res.status(400).json({
+          error: `created_by missing for WSN: ${wsn}`
+        });
+      }
+
+      const sql = `
+        INSERT INTO picking 
+        (wsn, picking_date, picker_name, source, warehouse_id, created_by, created_user_name, created_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
+      `;
+
+      await query(sql, [
+        wsn,
+        entry.picking_date,
+        entry.picker_name,
+        entry.source,
+        warehouse_id,
+        userId,
+        userName
+      ]);
+
       successCount++;
     }
 
-    res.json({ successCount, totalCount: entries.length });
+    res.json({
+      successCount,
+      totalCount: entries.length
+    });
+
   } catch (error: any) {
-    console.error('Error:', error);
-    res.status(500).json({ error: error.message });
+    console.error('❌ Multi-picking error:', error);
+    res.status(500).json({ error: error.message || 'Internal error' });
   }
 };
+
 
 export const getPickingList = async (req: Request, res: Response) => {
   try {
@@ -366,3 +392,4 @@ export const getExistingWSNs = async (req: Request, res: Response) => {
     res.status(500).json({ error: error.message });
   }
 };
+
